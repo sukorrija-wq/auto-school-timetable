@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Auto Jadual Sekolah (Auto-Generate)</title>
+<title>Auto Jadual Sekolah – Wilayah (Timur/Barat/Custom)</title>
 <meta name="theme-color" content="#0f172a">
 <style>
   :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#22c55e;--border:#233046}
@@ -45,7 +45,7 @@
 <body>
 <div class="container">
   <header>
-    <h1>📚 Auto Jana Jadual – Sekolah Rendah</h1>
+    <h1>📚 Auto Jana Jadual – Sekolah Rendah (Wilayah)</h1>
     <div class="no-print" style="display:flex;gap:6px;align-items:center">
       <span class="badge">Auto-generate aktif</span>
       <span class="badge">Dibangunkan oleh Lisa · Powered by Sukor Rija Legacy</span>
@@ -84,10 +84,26 @@
         </div>
       </div>
 
+      <!-- Preset Wilayah -->
+      <div class="row3" style="margin-top:10px">
+        <div>
+          <label>Wilayah</label>
+          <select id="wilayah">
+            <option value="barat" selected>Pantai Barat (Isnin–Jumaat)</option>
+            <option value="timur">Pantai Timur (Ahad–Khamis)</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div>
+          <label>—</label>
+          <div class="muted">Pilih “Custom” jika mahu tentukan hari sendiri.</div>
+        </div>
+      </div>
+
       <div style="margin-top:10px">
         <label>Hari Bersekolah</label>
         <div id="hariChips" class="chips no-print"></div>
-        <div class="muted">Tanda hari yang digunakan. Jadual dijana mengikut hari bertanda.</div>
+        <div class="muted">Jadual dijana mengikut hari bertanda.</div>
       </div>
 
       <div class="row3" style="margin-top:10px">
@@ -136,7 +152,7 @@
         <button class="no-print" onclick="shareWhatsApp()">Kongsi WhatsApp</button>
         <button class="no-print" onclick="clearAll()">Kosongkan Semua</button>
       </div>
-      <p class="muted" style="margin-top:6px">Auto-generate aktif: jadual dijana semula setiap kali Sukor ubah tetapan / subjek / slot tetap.</p>
+      <p class="muted" style="margin-top:6px">Auto-generate aktif: jadual dijana semula setiap kali anda ubah tetapan / subjek / slot tetap.</p>
     </section>
 
     <!-- KANAN: Output Jadual -->
@@ -162,15 +178,17 @@
 
 <script>
 /* ===== Util ===== */
-const HARI_DEFAULT=['Isnin','Selasa','Rabu','Khamis','Jumaat'];
+const HARI_TIMUR = ['Ahad','Isnin','Selasa','Rabu','Khamis'];
+const HARI_BARAT = ['Isnin','Selasa','Rabu','Khamis','Jumaat'];
+const HARI_DEFAULT = HARI_BARAT.slice();
+
 function toMin(hhmm){const[a,b]=hhmm.split(':').map(Number);return a*60+b}
 function fm(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')}
 function el(tag,attrs={},kids=[]){const e=document.createElement(tag);Object.entries(attrs).forEach(([k,v])=>e[k]=v);(Array.isArray(kids)?kids:[kids]).forEach(c=>{if(c==null)return;typeof c==='string'?e.appendChild(document.createTextNode(c)):e.appendChild(c)});return e}
-function deep(x){return JSON.parse(JSON.stringify(x))}
 
 /* ===== State ===== */
-let hariAktif = new Set(HARI_DEFAULT);     // boleh buang/ tambah hari
-let fixedSlots=[]; // {hariIndex,waktuIndex,nama}
+let hariAktif = new Set(HARI_DEFAULT); // dikawal oleh "Wilayah" atau custom
+let fixedSlots=[]; // {hariIndex,waktuIndex,nama} berdasarkan index asal hari Pantai Barat/Timur (0..4 dari konst HARI_* mengikut dropdown)
 let subjects=[];
 
 /* ===== Defaults ===== */
@@ -188,15 +206,14 @@ function defaultSubjects(){
 }
 
 /* ===== UI Render ===== */
-function renderHariChips(){
-  const box=document.getElementById('hariChips');
-  box.innerHTML='';
-  HARI_DEFAULT.forEach((h,i)=>{
-    const chip=el('label',{className:'chip'},[
-      el('input',{type:'checkbox',checked:hariAktif.has(h),onchange:(e)=>{ e.target.checked?hariAktif.add(h):hariAktif.delete(h); autoGenerate(); }}),
-      h
-    ]);
-    box.appendChild(chip);
+function renderHariChips(disabled=false){
+  const box=document.getElementById('hariChips'); box.innerHTML='';
+  const ordered = Array.from(hariAktif);
+  ordered.forEach(h=>{
+    const chip=document.createElement('label'); chip.className='chip';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.disabled=disabled;
+    cb.onchange=(e)=>{ if(!e.target.checked){ hariAktif.delete(h); } else { hariAktif.add(h); } autoGenerate(); };
+    chip.appendChild(cb); chip.appendChild(document.createTextNode(' '+h)); box.appendChild(chip);
   });
 }
 
@@ -212,8 +229,7 @@ function renderSubjects(){
     ]);
     const p=el('input',{type:'number',min:10,placeholder:'min (opsyenal)',value:s.tempoh??'',oninput:e=>{const v=e.target.value; s.tempoh=v===''?null:parseInt(v); autoGenerate();}});
     const del=el('button',{title:'Padam',onclick:()=>{subjects.splice(idx,1);renderSubjects();autoGenerate()}},'✕');
-    row.append(n,k,t,p,del);
-    wrap.appendChild(row);
+    row.append(n,k,t,p,del); wrap.appendChild(row);
   });
 }
 function addSubject(){ subjects.push({nama:'Subjek Baru',kekerapan:1,teras:false,tempoh:null}); renderSubjects(); autoGenerate(); }
@@ -223,13 +239,15 @@ function renderFixedSlots(){
   const box=document.getElementById('slotTetapList'); box.innerHTML='';
   fixedSlots.forEach((s,idx)=>{
     const row=el('div',{className:'row4'});
+    // Hari dropdown ikut mod wilayah semasa: guna label hari dari getHariSemasa()
+    const hariSemasa = getHariSemasa();
     const hariSel=el('select',{value:s.hariIndex,onchange:e=>{s.hariIndex=parseInt(e.target.value);autoGenerate()}},
-      HARI_DEFAULT.map((h,i)=> el('option',{value:i,selected:i===s.hariIndex},h)));
+      hariSemasa.map((h,i)=> el('option',{value:i,selected:i===s.hariIndex},h)));
     const waktu=el('input',{type:'number',min:1,value:s.waktuIndex+1,oninput:e=>{s.waktuIndex=Math.max(0,(parseInt(e.target.value)||1)-1);autoGenerate()}});
     const nama=el('input',{value:s.nama,placeholder:'Contoh: Perhimpunan',oninput:e=>{s.nama=e.target.value;autoGenerate()}});
     const del=el('button',{onclick:()=>{fixedSlots.splice(idx,1);renderFixedSlots();autoGenerate()}},'Padam');
     row.append(el('div',{},[el('label',{},'Hari'),hariSel]),
-               el('div',{},[el('label',{},'Waktu Ke-'),waktu]),
+               el('div',{},[el('label',},'Waktu Ke-'),waktu]),
                el('div',{},[el('label',{},'Nama Slot'),nama]),
                el('div',{},[el('label',{},' '),del]));
     box.appendChild(row);
@@ -238,9 +256,31 @@ function renderFixedSlots(){
 function addFixedSlot(){ fixedSlots.push({hariIndex:0,waktuIndex:0,nama:'Perhimpunan'}); renderFixedSlots(); autoGenerate(); }
 function clearFixedSlots(){ fixedSlots=[]; renderFixedSlots(); autoGenerate(); }
 
+/* ===== Wilayah Preset ===== */
+function getHariSemasa(){
+  const w = document.getElementById('wilayah').value;
+  if(w==='timur') return HARI_TIMUR.slice();
+  if(w==='barat') return HARI_BARAT.slice();
+  // custom: ikut susunan semasa chips
+  return Array.from(hariAktif);
+}
+function applyWilayahPreset(val){
+  if(val==='timur'){
+    hariAktif = new Set(HARI_TIMUR);
+    renderHariChips(true);   // kunci chips
+  } else if(val==='barat'){
+    hariAktif = new Set(HARI_BARAT);
+    renderHariChips(true);
+  } else {
+    if(!hariAktif.size) hariAktif = new Set(HARI_DEFAULT);
+    renderHariChips(false);  // boleh ubah chips
+  }
+  renderFixedSlots(); // refresh label hari dalam slot tetap
+  autoGenerate();
+}
+
 /* ===== Time Slots ===== */
-function buildSlotsForDay(globalStart, globalLen, nPeriods, rehatMin, rehatAfter, dayIndex){
-  // Per-subject tempoh khas disokong pada tahap per-penempatan (kita tetap paparkan masa grid berdasarkan globalLen + rehat)
+function buildSlotsForDay(globalStart, globalLen, nPeriods, rehatMin, rehatAfter){
   const slots=[];
   let t=globalStart;
   for(let i=1;i<=nPeriods;i++){
@@ -256,28 +296,23 @@ function buildSlotsForDay(globalStart, globalLen, nPeriods, rehatMin, rehatAfter
 
 /* ===== Planner ===== */
 function planWeek(){
-  // Meta
   const start = toMin(document.getElementById('masaMula').value);
   const len = parseInt(document.getElementById('panjangWaktu').value);
   const n = parseInt(document.getElementById('bilWaktu').value);
   const rehatMin = parseInt(document.getElementById('minRehat').value);
   const rehatAfter = Math.min(Math.max(1, parseInt(document.getElementById('rehatSelepas').value)), Math.max(1,n-1));
 
-  // Hari aktif (map ke index asal untuk slot tetap)
-  const days = HARI_DEFAULT.map((h,i)=>({name:h,origIndex:i})).filter(d=>hariAktif.has(d.name));
+  const hariSemasa = getHariSemasa();
+  const days = hariSemasa.map((h,i)=>({name:h,origIndex:i}));
   if(days.length===0) return {days:[], slotsPerDay:[], grid:[]};
 
-  // Bina slots untuk setiap hari
-  const slotsPerDay = days.map((d)=> buildSlotsForDay(start,len,n,rehatMin,rehatAfter,d.origIndex));
+  const slotsPerDay = days.map(()=> buildSlotsForDay(start,len,n,rehatMin,rehatAfter));
+  const grid = days.map(()=> slotsPerDay[0].map(s=> s.type==='recess'? {type:'recess',text:'REHAT'} : {type:'period',text:''}));
 
-  // Grid kosong
-  const grid = days.map((_,di)=> slotsPerDay[di].map(s=> s.type==='recess'? {type:'recess',text:'REHAT'} : {type:'period',text:''}));
-
-  // Letak slot tetap (hormat hari aktif)
+  // Slot tetap (indeks berdasarkan senarai hari semasa)
   fixedSlots.forEach(fs=>{
-    const di = days.findIndex(d=>d.origIndex===fs.hariIndex);
-    if(di<0) return;
-    // cari indeks 'period' ke-N
+    const di = fs.hariIndex; // sudah ikut hariSemasa
+    if(di<0 || di>=days.length) return;
     let pCount=0;
     for(let idx=0; idx<slotsPerDay[di].length; idx++){
       if(slotsPerDay[di][idx].type==='period'){
@@ -290,10 +325,8 @@ function planWeek(){
   // Pool subjek ikut kekerapan
   const pool=[];
   subjects.forEach(s=>{ for(let i=0;i<s.kekerapan;i++) pool.push({nama:s.nama,teras:!!s.teras,tempoh:s.tempoh}) });
-  // Keutamaan: teras dulu
   pool.sort((a,b)=>(b.teras?1:0)-(a.teras?1:0));
 
-  // Heuristik canPlace
   function canPlace(di, si, nama){
     const cell=grid[di][si];
     if(cell.type!=='period' || cell.text) return false;
@@ -304,17 +337,12 @@ function planWeek(){
     return true;
   }
 
-  // Susunan slot: awal dahulu
   const orderIndex = [...Array(grid[0].length).keys()];
-
-  // Isi
   let guard=0;
   while(pool.length && guard<6000){
     guard++;
     const it = pool.shift();
     let placed=false;
-
-    // cuba letak ikut preferensi (teras awal, bukan teras lewat)
     const prefer = (si)=> it.teras ? si < Math.floor(orderIndex.length/2) : si >= Math.floor(orderIndex.length/2);
 
     for(let di=0; di<days.length && !placed; di++){
@@ -323,7 +351,6 @@ function planWeek(){
       }
     }
     if(!placed){
-      // mana-mana lubang
       outer: for(let di=0; di<days.length; di++){
         for(let si=0; si<grid[di].length; si++){
           if(canPlace(di,si,it.nama)){ grid[di][si].text=it.nama; placed=true; break outer; }
@@ -331,7 +358,6 @@ function planWeek(){
       }
     }
     if(!placed){
-      // parkir di hujung minggu terakhir
       for(let si=grid[days.length-1].length-1; si>=0; si--){
         if(canPlace(days.length-1,si,it.nama)){ grid[days.length-1][si].text=it.nama; placed=true; break; }
       }
@@ -351,7 +377,6 @@ function renderTable(plan){
   if(plan.days.length===0){ tbl.innerHTML='<tr><td style="padding:20px">Tiada hari dipilih.</td></tr>'; return; }
 
   const thead=el('thead'); const trh=el('tr'); trh.appendChild(el('th',{},'Hari / Masa'));
-  // gunakan masa dari hari pertama (format sama untuk semua hari)
   const slotsRef=plan.slotsPerDay[0];
   slotsRef.forEach(s=> trh.appendChild(el('th',{}, `${s.start}–${s.end}${s.type==='recess'?' (Rehat)':''}` )));
   thead.appendChild(trh); tbl.appendChild(thead);
@@ -360,7 +385,7 @@ function renderTable(plan){
   plan.grid.forEach((row,di)=>{
     const tr=el('tr');
     tr.appendChild(el('th',{}, plan.days[di].name));
-    row.forEach((cell,si)=>{
+    row.forEach((cell)=>{
       const td=el('td',{});
       if(cell.type==='recess'){ td.textContent='REHAT'; td.classList.add('recess'); }
       else{
@@ -411,6 +436,7 @@ function collectState(){
       bilWaktu:+document.getElementById('bilWaktu').value,
       minRehat:+document.getElementById('minRehat').value,
       rehatSelepas:+document.getElementById('rehatSelepas').value,
+      wilayah:document.getElementById('wilayah').value,
       hari:[...hariAktif]
     },
     subjects, fixedSlots,
@@ -428,17 +454,19 @@ function applyState(d){
     document.getElementById('bilWaktu').value=m.bilWaktu||8;
     document.getElementById('minRehat').value=m.minRehat||30;
     document.getElementById('rehatSelepas').value=m.rehatSelepas||3;
-    hariAktif = new Set(m.hari && m.hari.length? m.hari : HARI_DEFAULT);
-    renderHariChips();
+    document.getElementById('wilayah').value=m.wilayah||'barat';
+    applyWilayahPreset(document.getElementById('wilayah').value);
+    // jika custom, set hariAktif ikut simpanan
+    if(m.wilayah==='custom' && m.hari && m.hari.length){ hariAktif = new Set(m.hari); renderHariChips(false); }
   }
   if(d.subjects){ subjects=d.subjects; renderSubjects(); }
   if(d.fixedSlots){ fixedSlots=d.fixedSlots; renderFixedSlots(); }
   if(d.tableHTML){ document.getElementById('jadual').innerHTML=d.tableHTML; }
   autoGenerate();
 }
-function saveState(){ localStorage.setItem('autoJadual', JSON.stringify(collectState())); alert('Disimpan pada peranti.'); }
-function loadState(){ const raw=localStorage.getItem('autoJadual'); if(!raw) return alert('Tiada simpanan.'); applyState(JSON.parse(raw)); }
-function exportJSON(){ const blob=new Blob([JSON.stringify(collectState(),null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='auto-jadual.json'; a.click(); }
+function saveState(){ localStorage.setItem('autoJadualWilayah', JSON.stringify(collectState())); alert('Disimpan pada peranti.'); }
+function loadState(){ const raw=localStorage.getItem('autoJadualWilayah'); if(!raw) return alert('Tiada simpanan.'); applyState(JSON.parse(raw)); }
+function exportJSON(){ const blob=new Blob([JSON.stringify(collectState(),null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='auto-jadual-wilayah.json'; a.click(); }
 function importJSON(){ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=()=>{ const f=inp.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{applyState(JSON.parse(r.result)); alert('JSON dimuatkan.')}catch{alert('Fail tidak sah.')} }; r.readAsText(f)}; inp.click(); }
 function clearAll(){
   if(!confirm('Kosongkan semua?')) return;
@@ -450,30 +478,36 @@ function clearAll(){
   document.getElementById('bilWaktu').value=8;
   document.getElementById('minRehat').value=30;
   document.getElementById('rehatSelepas').value=3;
-  hariAktif = new Set(HARI_DEFAULT); renderHariChips();
+  document.getElementById('wilayah').value='barat';
+  hariAktif = new Set(HARI_BARAT); renderHariChips(true);
   subjects=defaultSubjects(); renderSubjects();
   fixedSlots=[]; renderFixedSlots();
   document.getElementById('jadual').innerHTML='';
 }
 
-/* ===== Init & Event Wiring ===== */
+/* ===== Wiring ===== */
 function wireAuto(){
   const ids=['nama','kelas','sesi','masaMula','panjangWaktu','bilWaktu','minRehat','rehatSelepas'];
   ids.forEach(id=>{
     document.getElementById(id).addEventListener('input', autoGenerate);
     document.getElementById(id).addEventListener('change', autoGenerate);
   });
-  // sesi sync masa mula
   document.getElementById('sesi').addEventListener('change', ()=>{
     document.getElementById('masaMula').value = document.getElementById('sesi').value==='pagi'?'07:30':'13:00';
   });
+  document.getElementById('wilayah').addEventListener('change',(e)=> applyWilayahPreset(e.target.value));
 }
+
+/* ===== Init ===== */
 (function init(){
-  renderHariChips();
+  // Default Pantai Barat
+  hariAktif = new Set(HARI_BARAT);
+  renderHariChips(true);
   subjects=defaultSubjects(); renderSubjects();
   renderFixedSlots();
   wireAuto();
-  autoGenerate(); // generate awal
+  document.getElementById('wilayah').value='barat';
+  autoGenerate(); // jana awal
 })();
 </script>
 </body>
